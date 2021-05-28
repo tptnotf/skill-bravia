@@ -22,7 +22,7 @@ class BraviaSkill(MycroftSkill):
         self.settings["tv_ip"] = None
         self.settings["tv_password"] = True
 
-    @intent_handler(IntentBuilder('ChannelIntent').require('Channel').optional('Number'))
+    @intent_handler(IntentBuilder('ChannelIntent').require('Channel'))
     def handle_change_channel_intent(self, message):
         self.speak_dialog("change.channel")
 
