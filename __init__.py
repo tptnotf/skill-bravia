@@ -27,6 +27,13 @@ class BraviaSkill(MycroftSkill):
         channel_number = message.data.get("Number")
         self.speak_dialog("change.channel", {'number': channel_number})
 
+    @intent_handler(IntentBuilder('VolumeUpIntent').require('Volume').require('Up'))
+    def handle_change_channel_intent(self, message):
+        self.speak_dialog("volume.up")
+
+    @intent_handler(IntentBuilder('VolumeDownIntent').require('Volume').require('Down'))
+    def handle_change_channel_intent(self, message):
+        self.speak_dialog("volume.down")
 
 def create_skill():
     return BraviaSkill()
