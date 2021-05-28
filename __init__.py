@@ -12,23 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import pytz
-import time
-from copy import deepcopy
-from datetime import datetime, timedelta
-from requests import HTTPError, Response
-
-import mycroft.audio
 from adapt.intent import IntentBuilder
-from mycroft.api import Api
 from mycroft import MycroftSkill, intent_handler
-from mycroft.messagebus.message import Message
-from mycroft.util.log import LOG
-from mycroft.util.format import (nice_date, nice_time, nice_number,
-                                 pronounce_number, join_list)
-from mycroft.util.parse import extract_datetime, extract_number
-from mycroft.util.time import now_local, to_utc, to_local
 
 
 class BraviaSkill(MycroftSkill):
