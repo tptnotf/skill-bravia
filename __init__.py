@@ -17,12 +17,10 @@ from mycroft import MycroftSkill, intent_handler
 
 
 class BraviaSkill(MycroftSkill):
-    def __init__(self):
-        super().__init__("BraviaSkill")
 
     def initialize(self):
         self.settings["tv_ip"] = None
-        self.settings["tb_password"] = True
+        self.settings["tv_password"] = True
 
     @intent_handler(IntentBuilder('ChannelIntent').require('Channel').optional('Number'))
     def handle_change_channel_intent(self, message):
