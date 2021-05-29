@@ -21,8 +21,10 @@ from mycroft import MycroftSkill, intent_handler
 class BraviaSkill(MycroftSkill):
 
     def initialize(self):
-        super.base_url = 'http://' + self.settings.get("tv_ip") + "/sony/"
-        super.key = self.settings.get("tv_password")
+        global base_url
+        base_url = 'http://' + self.settings.get("tv_ip") + "/sony/"
+        global key
+        key = self.settings.get("tv_password")
 
     @intent_handler(IntentBuilder('ChannelIntent').require('Channel').optionally('Number'))
     def handle_change_channel_intent(self, message):
@@ -50,6 +52,7 @@ key = 'a4G2H3f3sd5G8JU2'
 headers = {
     'X-Auth-PSK': key
 }
+
 
 # COMMON METHODS
 
