@@ -1,1 +1,1 @@
-.* channel (?P<Number>.*)
+.* channel (?P<Number>\S*).*

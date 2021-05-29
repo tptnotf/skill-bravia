@@ -1,1 +1,1 @@
-.* canal (?P<Number>.*)
+.* canal (?P<Number>\S*).*
