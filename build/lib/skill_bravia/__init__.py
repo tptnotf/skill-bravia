@@ -172,22 +172,19 @@ class BraviaSkill(OVOSSkill):
             wanted_app = message.data.get("app_name", None)
             matches = []
             if wanted_app:
-                LOG.debug(f"wanted app: {wanted_app}")
                 for app in client.app_list:
-                    if fuzzy_match(wanted_app, app['title']) >= .5:
+                    if fuzzy_match(wanted_app, app.title) >= .5:
                         matches.append(app)
                 for app in matches:
-                    if wanted_app.lower() in app['title'].lower():
+                    if wanted_app.lower() in app.title.lower():
                         wanted_app = app
                         break
                 if not isinstance(wanted_app, dict) and len(matches) > 0:
                     wanted_app = matches[0] # pick the first in the list if all else fails
-                    LOG.debug(f"wanted app in 'not isinstance': {wanted_app}")
                     client.set_active_app(wanted_app.uri)
                     self.speak_dialog("opened.tv.app", {"app_name": wanted_app.title,
                                                         "tv_name": client.name})
                 else:
-
                     self.speak_dialog("no.app", {"app_name": wanted_app,
                                                  "tv_name": client.name})
         else:

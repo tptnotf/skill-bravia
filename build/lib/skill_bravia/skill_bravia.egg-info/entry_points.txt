@@ -1,0 +1,2 @@
+[ovos.plugin.skill]
+skill_bravia.builderjer = skill_bravia:BraviaSkill
