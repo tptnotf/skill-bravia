@@ -12,590 +12,263 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
-
 import requests
-from adapt.intent import IntentBuilder
-from mycroft import MycroftSkill, intent_handler
 
+from ovos_utils.intents import IntentBuilder
+from ovos_utils.parse import match_one, match_all, fuzzy_match
+from ovos_workshop.skills import OVOSSkill
+from mycroft import intent_handler
+from ovos_utils.log import LOG
+from lingua_franca import get_default_lang, load_language
+from lingua_franca.parse import yes_or_no, extract_number
 
-class BraviaSkill(MycroftSkill):
+from .bravia_client import Client, ClientApp
+
+class BraviaSkill(OVOSSkill):
+    def __init__(self):
+        super().__init__()
+        self.clients = []
+        self.vol_inc = 5
 
     def initialize(self):
-        global base_url
-        base_url = 'http://' + self.settings.get("tv_ip") + "/sony/"
-        global key
-        key = self.settings.get("tv_password")
+        dc_ip = self.settings.get("dc_ip", None)
+        if dc_ip and dc_ip.split(".")[-1].isdigit():
+            self.clients.append(Client(self.settings.get("dc_name", ""), dc_ip, int(self.settings.get("dc_port", 5555)), self.settings.get("dc_key", "")))
+        self._populate_clients()
+        load_language(self.lang)
+        self.vol_inc = self.settings.get("vol_increment", self.vol_inc)
 
-    @intent_handler(IntentBuilder('ChannelIntent').require('Channel').optionally('Number'))
-    def handle_change_channel_intent(self, message):
-        channel_number = message.data.get("Number")
-        self.speak_dialog("change.channel", {'number': channel_number})
+#########################
+#
+# Power Management
+#
 
-    @intent_handler(IntentBuilder('VolumeUpIntent').require('TV').require('Volume').require('Up'))
-    def handle_change_channel_intent(self, message):
-        self.speak_dialog("volume.up")
-        volume_raise()
+    @intent_handler("turn.on.tv.intent")
+    def handle_turn_on_tv_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            if not client.is_on:
+                client.power_on()
+                self.speak_dialog("turn.on.tv", {"name": client.name})
+            else:
+                self.speak_dialog('already.on', {'name': client.name})
+        else:
+            self.speak_dialog('no.client')
 
-    @intent_handler(IntentBuilder('VolumeDownIntent').require('TV').require('Volume').require('Down'))
-    def handle_change_channel_intent(self, message):
-        self.speak_dialog("volume.down")
-        volume_lower()
+    @intent_handler("turn.off.tv.intent")
+    def handle_turn_off_tv_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            if client.is_on:
+                client.power_off()
+                self.speak_dialog("turn.off.tv", {"name": client.name})
+            else:
+                self.speak_dialog('already.off', {'name': client.name})
+        else:
+            self.speak_dialog('no.client')
 
+    @intent_handler("reboot.tv.intent")
+    def handle_reboot_tv_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            if self.ask_yesno("are you sure you want to reboot"):
+                self.speak_dialog("rebooting")
+                client.request_reboot()
+            else:
+                self.speak_dialog("reboot canceled")
+
+#
+# End Power Management
+#
+############################
+
+############################
+#
+# Sound Management
+#
+
+    @intent_handler("turn.up.tv.volume.intent")
+    def handle_turn_up_tv_volume_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            LOG.info(f"active_client: {client.name}")
+            client.volume = client.volume + self.vol_inc
+            self.speak_dialog("tv.volume.up", {"name": client.name,
+                                            "volume": client.volume})
+        else:
+            self.speak_dialog('no.client')
+
+    @intent_handler("turn.up.tv.volume.amount.intent")
+    def handle_turn_up_tv_volume_amount_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            amount = extract_number(message.data.get("amount", None))
+            if amount:
+                client.volume = client.volume + amount
+                self.speak_dialog("tv.volume.set.to", {"name": client.name,
+                                                       "volume": client.volume})
+            else:
+                self.handle_turn_up_tv_volume_intent(message)
+        else:
+            self.speak_dialog("no.client")
+
+    @intent_handler("turn.down.tv.volume.intent")
+    def handle_turn_down_tv_volume_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            LOG.info(f"active_client: {client.name}")
+            client.volume = client.volume - self.vol_inc
+            self.speak_dialog("tv.volume.down", {"name": client.name,
+                                            "volume": client.volume})
+        else:
+            self.speak_dialog('no.client')
+
+    @intent_handler("turn.down.tv.volume.amount.intent")
+    def handle_turn_down_tv_volume_amount_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            amount = extract_number(message.data.get("amount", None))
+            if amount:
+                client.volume = client.volume - amount
+                self.speak_dialog("tv.volume.set.to", {"name": client.name,
+                                                       "volume": client.volume})
+            else:
+                self.handle_turn_down_tv_volume_intent(message)
+        else:
+            self.speak_dialog("no.client")
+
+    @intent_handler("mute.tv.volume.intent")
+    def handle_mute_tv_volume_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.mute()
+            self.speak_dialog("mute.tv.volume", {"name": client_name})
+        else:
+            self.speak_dialog("no.client")
+
+    @intent_handler("unmute.tv.volume.intent")
+    def handle_unmute_tv_volume_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.unmute()
+            self.speak_dialog("unmute.tv.volume", {"name": client_name})
+        else:
+            self.speak_dialog("no.client")
+
+#
+# End Sound Stuff
+#
+###############################
+
+###############################
+#
+# App Stuff
+#
+
+    @intent_handler("open.tv.app.intent")
+    def handle_open_tv_app_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            wanted_app = message.data.get("app_name", None)
+            matches = []
+            if wanted_app:
+                LOG.debug(f"wanted app: {wanted_app}")
+                for app in client.app_list:
+                    if fuzzy_match(wanted_app, app['title']) >= .5:
+                        matches.append(app)
+                for app in matches:
+                    if wanted_app.lower() in app['title'].lower():
+                        wanted_app = app
+                        break
+                if not isinstance(wanted_app, dict) and len(matches) > 0:
+                    wanted_app = matches[0] # pick the first in the list if all else fails
+                    LOG.debug(f"wanted app in 'not isinstance': {wanted_app}")
+                    client.set_active_app(wanted_app.uri)
+                    self.speak_dialog("opened.tv.app", {"app_name": wanted_app.title,
+                                                        "tv_name": client.name})
+                else:
+
+                    self.speak_dialog("no.app", {"app_name": wanted_app,
+                                                 "tv_name": client.name})
+        else:
+            self.speak_dialog('no.client')
+
+#
+# End App Stuff
+#
+################################
+
+################################
+#
+# Player Controls
+#
+# The Bravia REST API does not provide a direct way to get the playing status of all apps
+# These functions mainly just emulate a remote button press
+#
+
+    @intent_handler("pause.player.intent")
+    def handle_pause_player_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.send_command("Pause")
+
+    @intent_handler("play.player.intent")
+    def handle_play_player_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.send_command("Play")
+
+    @intent_handler("stop.player.intent")
+    def handle_stop_player_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.send_command("Stop")
+
+    @intent_handler("fast.forward.player.intent")
+    def handle_fast_forward_player_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.send_command("Forward")
+
+    @intent_handler("rewind.player.intent")
+    def handle_rewind_player_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.send_command("Rewind")
+
+    @intent_handler("next.player.intent")
+    def handle_next_player_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.send_command("Next")
+
+    @intent_handler("last.player.intent")
+    def handle_last_player_intent(self, message):
+        if self.clients:
+            client = self.get_client(message.data.get("name", None))
+            client.send_command("Last")
+
+################################
+#
+# Other Functions
+#
+
+    def get_client(self, client_name=None):
+        if len(self.clients) >= 1:
+            active_client = self.clients[0]
+            for client in self.clients:
+                if client_name == client.name:
+                    active_client = client
+        return active_client
+
+    def _populate_clients(self):
+        client_list = self.settings.get("clients", None)
+        LOG.info(f"in _populate_clients:  {client_list}")
+        if client_list:
+            for client in client_list:
+                LOG.info(client)
+                self.clients.append(Client(client["name"], client["ip"], client["port"], client["access_key"]))
 
 def create_skill():
     return BraviaSkill()
 
-
-base_url = 'http://192.168.1.208/sony/'
-key = 'a4G2H3f3sd5G8JU2'
-
-headers = {
-    'X-Auth-PSK': key
-}
-
-
-# COMMON METHODS
-
-
-def post_request(url, data):
-    return requests.post(url, data=json.dumps(data).encode("UTF-8"), headers=headers)
-
-
-# GUIDE SERVICE
-
-
-guide_url = base_url + 'guide'
-
-
-def get_supported_api_info():
-    data = {
-        "method": "getSupportedApiInfo",
-        "id": 101,
-        "params": [{
-            "services": ["system", "avContent"]
-        }],
-        "version": "1.0"
-    }
-    return post_request(guide_url, data)
-
-
-# APP CONTROL SERVICE
-
-
-app_control_url = base_url + 'appControl'
-
-
-def get_application_list():
-    data = {
-        "method": "getApplicationList",
-        "id": 201,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(app_control_url, data)
-
-
-def get_application_status_list():
-    data = {
-        "method": "getApplicationStatusList",
-        "id": 202,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(app_control_url, data)
-
-
-def get_text_form():
-    data = {
-        "method": "getTextForm",
-        "id": 203,
-        "params": [{}],
-        "version": "1.1"
-    }
-
-    return post_request(app_control_url, data)
-
-
-def get_web_app_status():
-    data = {
-        "method": "getWebAppStatus",
-        "id": 204,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(app_control_url, data)
-
-
-def set_active_app(uri):
-    data = {
-        "method": "setActiveApp",
-        "id": 205,
-        "params": [{
-            "uri": uri
-        }],
-        "version": "1.0"
-    }
-
-    return post_request(app_control_url, data)
-
-
-def set_text_form(text):
-    data = {
-        "method": "setTextForm",
-        "id": 206,
-        "params": [{
-            "encKey": "",
-            "text": text
-        }],
-        "version": "1.1"
-    }
-
-    return post_request(app_control_url, data)
-
-
-def terminate_apps():
-    data = {
-        "method": "terminateApps",
-        "id": 207,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(app_control_url, data)
-
-
-# AUDIO SERVICE
-
-
-audio_url = base_url + 'audio'
-
-
-def get_sound_settings():
-    data = {
-        "method": "getSoundSettings",
-        "id": 301,
-        "params": [{"target": ""}],
-        "version": "1.1"
-    }
-
-    return post_request(audio_url, data)
-
-
-def get_speaker_settings():
-    data = {
-        "method": "getSpeakerSettings",
-        "id": 302,
-        "params": [{"target": ""}],
-        "version": "1.0"
-    }
-
-    return post_request(audio_url, data)
-
-
-def get_volume_information():
-    data = {
-        "method": "getVolumeInformation",
-        "id": 303,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(audio_url, data)
-
-
-def set_audio_mute(status):
-    data = {
-        "method": "setAudioMute",
-        "id": 304,
-        "params": [{
-            "status": status
-        }],
-        "version": "1.0",
-    }
-
-    return post_request(audio_url, data)
-
-
-def mute():
-    return set_audio_mute(True)
-
-
-def unmute():
-    return set_audio_mute(False)
-
-
-def set_audio_volume(volume):
-    data = {
-        "method": "setAudioVolume",
-        "id": 305,
-        "params": [{
-            "volume": volume,
-            "ui": "on",
-            "target": "speaker"
-        }],
-        "version": "1.2"
-    }
-
-    return post_request(audio_url, data)
-
-
-def volume_raise():
-    set_audio_volume('+2')
-
-
-def volume_lower():
-    set_audio_volume('-2')
-
-
-def set_sound_settings(settings):
-    data = {
-        "method": "setSoundSettings",
-        "id": 306,
-        "params": [{"settings": settings}],
-        "version": "1.1"
-    }
-
-    return post_request(audio_url, data)
-
-
-def set_speaker_settings(settings):
-    data = {
-        "method": "setSpeakerSettings",
-        "id": 307,
-        "params": [{"settings": settings}],
-        "version": "1.0"
-    }
-
-    return post_request(audio_url, data)
-
-
-# AV CONTENT SERVICE
-
-
-av_content_url = base_url + 'avContent'
-
-
-def get_content_count(source, type, target):
-    data = {
-        "method": "getContentCount",
-        "id": 401,
-        "params": [{
-            "source": source,
-            "type": type,
-            "target": target
-        }],
-        "version": "1.0"
-    }
-
-    return post_request(av_content_url, data)
-
-
-def get_content_list(uri, st_idx, cnt):
-    data = {
-        "method": "getContentList",
-        "id": 402,
-        "params": [{
-            "uri": uri,
-            "stIdx": st_idx,
-            "cnt": cnt
-        }],
-        "version": "1.5"
-    }
-
-    return post_request(av_content_url, data)
-
-
-def get_current_external_inputs_status():
-    data = {
-        "method": "getCurrentExternalInputsStatus",
-        "id": 403,
-        "params": [],
-        "version": "1.1"
-    }
-
-    return post_request(av_content_url, data)
-
-
-def get_scheme_list():
-    data = {
-        "method": "getSchemeList",
-        "id": 404,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(av_content_url, data)
-
-
-def get_source_list(scheme):
-    data = {
-        "method": "getSourceList",
-        "id": 405,
-        "params": [{"scheme": scheme}],
-        "version": "1.0"
-    }
-
-    return post_request(av_content_url, data)
-
-
-def get_playing_content_info():
-    data = {
-        "method": "getPlayingContentInfo",
-        "id": 406,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(av_content_url, data)
-
-
-def set_play_content(uri):
-    data = {
-        "method": "setPlayContent",
-        "id": 407,
-        "params": [{"uri": uri}],
-        "version": "1.0"
-    }
-
-    return post_request(av_content_url, data)
-
-
-# ENCRYPTION SERVICE
-
-
-encryption_url = base_url + 'encryption'
-
-
-def get_public_key():
-    data = {
-        "method": "getPublicKey",
-        "id": 501,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(encryption_url, data)
-
-
-# SYSTEM SERVICE
-
-
-system_url = base_url + 'system'
-
-
-def get_current_time():
-    data = {
-        "method": "getCurrentTime",
-        "id": 601,
-        "params": [],
-        "version": "1.1"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_interface_information():
-    data = {
-        "method": "getInterfaceInformation",
-        "id": 602,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_led_indicator_status():
-    data = {
-        "method": "getLEDIndicatorStatus",
-        "id": 603,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_network_settings():
-    data = {
-        "method": "getNetworkSettings",
-        "id": 604,
-        "params": [{"netif": ""}],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_power_saving_mode():
-    data = {
-        "method": "getPowerSavingMode",
-        "id": 605,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_power_status():
-    data = {
-        "method": "getPowerStatus",
-        "id": 606,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_remote_controller_info():
-    data = {
-        "method": "getRemoteControllerInfo",
-        "id": 607,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_remote_device_settings():
-    data = {
-        "method": "getRemoteDeviceSettings",
-        "id": 608,
-        "params": [{"target": ""}],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_system_information():
-    data = {
-        "method": "getSystemInformation",
-        "id": 609,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_system_supported_function():
-    data = {
-        "method": "getSystemSupportedFunction",
-        "id": 610,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def get_wol_mode():
-    data = {
-        "method": "getWolMode",
-        "id": 611,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def request_reboot():
-    data = {
-        "method": "requestReboot",
-        "id": 612,
-        "params": [],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def set_led_indicator_status(mode, status):
-    data = {
-        "method": "setLEDIndicatorStatus",
-        "id": 613,
-        "params": [{
-            "mode": mode,
-            "status": status
-        }],
-        "version": "1.1"
-    }
-
-    return post_request(system_url, data)
-
-
-def set_language(language):
-    data = {
-        "method": "setLanguage",
-        "id": 614,
-        "params": [{"language": language}],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def set_power_saving_mode(mode):
-    data = {
-        "method": "setPowerSavingMode",
-        "id": 615,
-        "params": [{"mode": mode}],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def set_power_status(status):
-    data = {
-        "method": "setPowerStatus",
-        "id": 616,
-        "params": [{"status": status}],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-def power_on():
-    return set_power_status(True)
-
-
-def power_off():
-    return set_power_status(False)
-
-
-def set_wol_mode(mode):
-    data = {
-        "method": "setWolMode",
-        "id": 617,
-        "params": [{"enabled": mode}],
-        "version": "1.0"
-    }
-
-    return post_request(system_url, data)
-
-
-# VIDEO SCREEN SERVICE
-
-
-video_screen_url = base_url + 'videoScreen'
-
-
-def set_scene_setting(scene):
-    data = {
-        "method": "setSceneSetting",
-        "id": 701,
-        "params": [{"value": scene}],
-        "version": "1.0"
-    }
-
-    return post_request(video_screen_url, data)

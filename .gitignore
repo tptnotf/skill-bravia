@@ -2,3 +2,5 @@
 *.qmlc
 settings.json
 .vscode
+*build*
+*egg*

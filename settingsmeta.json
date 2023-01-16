@@ -6,18 +6,43 @@
                 "fields": [
                     {
                         "type": "label",
-                        "label": "Enter your Sony Bravia's IP and password"
+                        "label": "Settings for Bravia TV Skill"
                     },
                     {
-                        "name": "tv_ip",
+                        "name": "vol_inc",
                         "type": "text",
-                        "label": "IP",
-                        "value": "192.168.1.XXX"
+                        "label": "Volume steps",
+                        "value": "5"
+                    }
+                ],
+                "name": "Default Device",
+                "fields": [
+                    {
+                        "type": "label",
+                        "label": "Default Client Information"
                     },
                     {
-                        "name": "tv_password",
-                        "type": "password",
-                        "label": "TV password",
+                        "name": "dc_name",
+                        "type": "text",
+                        "label": "Pretty Name of TV",
+                        "value": "livingroom"
+                    },
+                    {
+                        "name": "dc_ip",
+                        "type": "text",
+                        "label": "IP for default TV",
+                        "value": "192.198.x.xxx"
+                    },
+                    {
+                        "name": "dc_port",
+                        "type": "text",
+                        "label": "Port to use",
+                        "value": "5555"
+                    },
+                    {
+                        "name": "dc_key",
+                        "type": "text",
+                        "label": "access key",
                         "value": ""
                     }
                 ]
